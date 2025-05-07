@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - streams-network
+
+  publisher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["npm", "run", "start:publisher"]
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PUBLISHER_INTERVAL_MS=1000
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - streams-network
+    deploy:
+      replicas: 1
+
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["npm", "run", "start:consumer"]
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CONSUMER_PROCESS_TIME_MS=500
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - streams-network
+    deploy:
+      replicas: 3
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  streams-network:
+    driver: bridge
